@@ -49,26 +49,6 @@ contains
       call read_snow17_parameters(parameters, namelist%snow17_param_file, runinfo)
         
       !---------------------------------------------------------------------
-      ! Open the forcing file
-      ! Comp. dir. NGEN_FORCING_ACTIVE indicates Nextgen forcing is used
-      !---------------------------------------------------------------------
-#ifndef NGEN_FORCING_ACTIVE
-      call init_forcing_files(namelist, runinfo, parameters)
-#endif
-      
-      !---------------------------------------------------------------------
-      ! If warm start is specified, read an initial state from a restart file
-      ! Comp. dir. NGEN_READ_RESTART_ACTIVE indicates Nextgen sets the states
-      !---------------------------------------------------------------------
-#ifndef NGEN_READ_RESTART_ACTIVE
-      ! we *ARE* warm-starting from a state file
-      ! read in external state files and overwrites namelist state variables
-      if(namelist%warm_start_run .eq. 1) then
-        call read_snow17_statefiles (modelvar, namelist, parameters, runinfo) 
-      endif
-#endif
-
-      !---------------------------------------------------------------------
       ! Create output file and write header
       ! Compiler directive NGEN_OUTPUT_ACTIVE indicates Nextgen controls outputs
       !---------------------------------------------------------------------
@@ -93,10 +73,41 @@ contains
               
              
   ! == Move the model ahead one time step ================================================================
-  SUBROUTINE advance_in_time(model)
+  FUNCTION advance_in_time(model) result(bmi_status)
+    integer                            :: bmi_status 
     type (snow17_type), intent (inout) :: model
+
     
     !print*, 'current time: ', model%runinfo%curr_datehr
+   if (model%runinfo%itime == 0) then   ! need to init with dates set by bmi
+      associate(namelist   => model%namelist,   &
+                runinfo    => model%runinfo,    &
+                parameters => model%parameters, &
+                modelvar   => model%modelvar)
+
+      bmi_status = init_timing(runinfo)  ! init start, end time step
+
+      !---------------------------------------------------------------------
+      ! Open the forcing file
+      ! Comp. dir. NGEN_FORCING_ACTIVE indicates Nextgen forcing is used
+      !---------------------------------------------------------------------
+#ifndef NGEN_FORCING_ACTIVE
+      call init_forcing_files(namelist, runinfo, parameters)
+#endif
+
+      !---------------------------------------------------------------------
+      ! If warm start is specified, read an initial state from a restart file
+      ! Comp. dir. NGEN_READ_RESTART_ACTIVE indicates Nextgen sets the states
+      !---------------------------------------------------------------------
+#ifndef NGEN_READ_RESTART_ACTIVE
+      ! we *ARE* warm-starting from a state file
+      ! read in external state files and overwrites namelist state variables
+      if(namelist%warm_start_run .eq. 1) then
+        call read_snow17_statefiles (modelvar, namelist, parameters, runinfo) 
+      endif
+#endif
+      end associate ! terminate the associate block
+    end if
 
     ! -- run snow17 for one time step
     call solve_snow17(model)
@@ -109,7 +120,7 @@ contains
     call unix_to_date_elem (model%runinfo%curr_datetime, model%runinfo%curr_yr, model%runinfo%curr_mo, model%runinfo%curr_dy, &
                             model%runinfo%curr_hr, model%runinfo%curr_min, model%runinfo%curr_sec)
     
-  END SUBROUTINE advance_in_time
+  END FUNCTION advance_in_time
   
 
   ! == Routing to run the model for one timestep and all spatial sub-units ================================

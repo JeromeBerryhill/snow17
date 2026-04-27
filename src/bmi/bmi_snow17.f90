@@ -247,8 +247,7 @@ contains
     class (bmi_snow17), intent(inout) :: this
     integer :: bmi_status
 
-    call advance_in_time(this%model)
-    bmi_status = BMI_SUCCESS
+    bmi_status = advance_in_time(this%model)
   end function snow17_update
 
   ! Advance the model until the given time.
@@ -266,13 +265,13 @@ contains
        return
     end if
     ! otherwise try to advance to end time
-    tmp_time = time
-    do while ( tmp_time < this%model%runinfo%end_datetime )
-       s = this%update()
-       tmp_time = this%model%runinfo%curr_datetime
+    do while ( time > this%model%runinfo%end_datetime )
+      bmi_status = this%update()
+      if (bmi_status == BMI_FAILURE) then 
+        return
+      end if
     end do
 
-    bmi_status = BMI_SUCCESS
   end function snow17_update_until
 
   ! Get the grid id for a particular variable.
@@ -1013,11 +1012,37 @@ contains
     integer :: bmi_status
 
     !==================== UPDATE IMPLEMENTATION IF NECESSARY FOR DOUBLE VARS =================
-
+    associate(runInfo => this%model%runInfo)
     select case(name)
+    ! timing values
+    case("START_TIME")
+      if(runInfo%itime == 0) then  ! simulation has not started yet
+        runInfo%start_datetime = src(1)
+        bmi_status = BMI_SUCCESS
+      else
+        print*,"Cannot change START_TIME after simulation has begun"
+        bmi_status = BMI_FAILURE
+      endif
+    case("END_TIME")
+      if(runInfo%itime == 0) then  ! simulation has not started yet
+        runInfo%end_datetime = src(1)
+        bmi_status = BMI_SUCCESS
+      else
+        print*,"Cannot change END_TIME after simulation has begun"
+        bmi_status = BMI_FAILURE
+      endif
+    case("TIME_STEP")
+      if(runInfo%itime == 0) then  ! simulation has not started yet
+        runInfo%DT = src(1)
+        bmi_status = BMI_SUCCESS
+      else
+        print*,"Cannot change TIME_STEP after simulation has begun"
+        bmi_status = BMI_FAILURE
+      endif
     case default
        bmi_status = BMI_FAILURE
     end select
+    end associate
   end function snow17_set_double
 
    ! Set integer values at particular locations.
